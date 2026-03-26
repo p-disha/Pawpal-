@@ -24,6 +24,20 @@ st.subheader("Add a Task")
 if "tasks" not in st.session_state:
     st.session_state.tasks = []
 
+
+def task_from_dict(t: dict) -> CareTask:
+    """Construct a CareTask from a session-state dict, tolerating missing or extra keys."""
+    return CareTask(
+        title=t["title"],
+        duration_mins=t["duration_mins"],
+        priority=t["priority"],
+        preferred_time=t.get("preferred_time"),
+        start_time=t.get("start_time"),
+        completed=t.get("completed", False),
+        frequency=t.get("frequency"),
+        pet_name=t.get("pet_name"),
+    )
+
 col1, col2, col3 = st.columns(3)
 with col1:
     task_title = st.text_input("Task title", value="Morning walk")
@@ -61,7 +75,7 @@ if st.session_state.tasks:
     _pet   = Pet(name=pet_name, species=species, age=int(age))
     _sched = Scheduler(owner=_owner, pet=_pet)
     for t in st.session_state.tasks:
-        _sched.add_task(CareTask(**t))
+        _sched.add_task(task_from_dict(t))
 
     # Conflict warnings shown immediately
     conflicts = _sched.detect_conflicts()
@@ -105,7 +119,7 @@ if st.button("Generate schedule", type="primary"):
         scheduler = Scheduler(owner=owner, pet=pet)
 
         for t in st.session_state.tasks:
-            scheduler.add_task(CareTask(**t))
+            scheduler.add_task(task_from_dict(t))
 
         # Conflict detection
         conflicts = scheduler.detect_conflicts()
