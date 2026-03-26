@@ -1,5 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+import json
+import pathlib
 
 
 PRIORITY_MAP = {"low": 1, "medium": 2, "high": 3}
@@ -12,6 +14,15 @@ class Owner:
     name: str
     available_mins: int  # total minutes available in the day
 
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-compatible dictionary."""
+        return {"name": self.name, "available_mins": self.available_mins}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Owner:
+        """Reconstruct an Owner from a dictionary."""
+        return cls(name=data["name"], available_mins=data["available_mins"])
+
 
 @dataclass
 class Pet:
@@ -20,6 +31,15 @@ class Pet:
     name: str
     species: str
     age: int  # in years
+
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-compatible dictionary."""
+        return {"name": self.name, "species": self.species, "age": self.age}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Pet:
+        """Reconstruct a Pet from a dictionary."""
+        return cls(name=data["name"], species=data["species"], age=data["age"])
 
 
 @dataclass
@@ -38,6 +58,33 @@ class CareTask:
     def priority_value(self) -> int:
         """Return numeric priority so tasks can be sorted (higher = more important)."""
         return PRIORITY_MAP.get(self.priority, 0)
+
+    def to_dict(self) -> dict:
+        """Serialize to a JSON-compatible dictionary."""
+        return {
+            "title": self.title,
+            "duration_mins": self.duration_mins,
+            "priority": self.priority,
+            "preferred_time": self.preferred_time,
+            "start_time": self.start_time,
+            "completed": self.completed,
+            "frequency": self.frequency,
+            "pet_name": self.pet_name,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> CareTask:
+        """Reconstruct a CareTask from a dictionary."""
+        return cls(
+            title=data["title"],
+            duration_mins=data["duration_mins"],
+            priority=data["priority"],
+            preferred_time=data.get("preferred_time"),
+            start_time=data.get("start_time"),
+            completed=data.get("completed", False),
+            frequency=data.get("frequency"),
+            pet_name=data.get("pet_name"),
+        )
 
 
 @dataclass
@@ -213,3 +260,33 @@ class Scheduler:
             return to_hhmm(cursor)
 
         return None
+
+
+# ── Persistence ───────────────────────────────────────────────────────────────
+
+def save_to_json(
+    owner: Owner,
+    pet: Pet,
+    tasks: list[CareTask],
+    path: str = "data.json",
+) -> None:
+    """Serialize owner, pet, and tasks to a JSON file."""
+    payload = {
+        "owner": owner.to_dict(),
+        "pet": pet.to_dict(),
+        "tasks": [t.to_dict() for t in tasks],
+    }
+    pathlib.Path(path).write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def load_from_json(path: str = "data.json") -> tuple[Owner, Pet, list[CareTask]]:
+    """Load owner, pet, and tasks from a JSON file.
+
+    Returns a tuple of (Owner, Pet, list[CareTask]).
+    Raises FileNotFoundError if the file does not exist.
+    """
+    data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    owner = Owner.from_dict(data["owner"])
+    pet   = Pet.from_dict(data["pet"])
+    tasks = [CareTask.from_dict(t) for t in data.get("tasks", [])]
+    return owner, pet, tasks

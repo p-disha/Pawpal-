@@ -1,28 +1,60 @@
 import streamlit as st
-from pawpal_system import Owner, Pet, CareTask, Scheduler
+from pawpal_system import Owner, Pet, CareTask, Scheduler, save_to_json, load_from_json
+
+DATA_FILE = "data.json"
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
 st.title("🐾 PawPal+")
 st.caption("A daily pet care planner that schedules tasks based on priority and your available time.")
 
+# --- Load persisted data once per session ---
+if "loaded" not in st.session_state:
+    try:
+        _owner, _pet, _tasks = load_from_json(DATA_FILE)
+        st.session_state.tasks        = [t.to_dict() for t in _tasks]
+        st.session_state.saved_owner  = _owner.name
+        st.session_state.saved_avail  = _owner.available_mins
+        st.session_state.saved_pet    = _pet.name
+        st.session_state.saved_species = _pet.species
+        st.session_state.saved_age    = _pet.age
+    except FileNotFoundError:
+        st.session_state.tasks = []
+        st.session_state.saved_owner  = "Jordan"
+        st.session_state.saved_avail  = 60
+        st.session_state.saved_pet    = "Mochi"
+        st.session_state.saved_species = "dog"
+        st.session_state.saved_age    = 3
+    st.session_state.loaded = True
+
+
+def _save(owner_name, available_mins, pet_name, species, age):
+    """Persist current state to data.json."""
+    save_to_json(
+        Owner(name=owner_name, available_mins=int(available_mins)),
+        Pet(name=pet_name, species=species, age=int(age)),
+        [task_from_dict(t) for t in st.session_state.tasks],
+        DATA_FILE,
+    )
+
+
 # --- Owner & Pet Info ---
 st.subheader("Owner & Pet Info")
 col1, col2 = st.columns(2)
 with col1:
-    owner_name = st.text_input("Owner name", value="Jordan")
-    available_mins = st.number_input("Time available today (minutes)", min_value=1, max_value=480, value=60)
+    owner_name    = st.text_input("Owner name", value=st.session_state.saved_owner)
+    available_mins = st.number_input("Time available today (minutes)", min_value=1, max_value=480,
+                                     value=st.session_state.saved_avail)
 with col2:
-    pet_name = st.text_input("Pet name", value="Mochi")
-    species = st.selectbox("Species", ["dog", "cat", "other"])
-    age = st.number_input("Pet age (years)", min_value=0, max_value=30, value=3)
+    pet_name = st.text_input("Pet name", value=st.session_state.saved_pet)
+    species  = st.selectbox("Species", ["dog", "cat", "other"],
+                            index=["dog", "cat", "other"].index(st.session_state.saved_species))
+    age      = st.number_input("Pet age (years)", min_value=0, max_value=30,
+                               value=st.session_state.saved_age)
 
 st.divider()
 
 # --- Task Management ---
 st.subheader("Add a Task")
-
-if "tasks" not in st.session_state:
-    st.session_state.tasks = []
 
 
 def task_from_dict(t: dict) -> CareTask:
@@ -62,7 +94,8 @@ if st.button("Add task", type="primary"):
             "frequency": None if frequency == "none" else frequency,
             "pet_name": pet_name.strip(),
         })
-        st.success(f"Added: {task_title.strip()}")
+        _save(owner_name, available_mins, pet_name, species, age)
+        st.success(f"Added: {task_title.strip()} (saved)")
 
 st.divider()
 
@@ -101,6 +134,7 @@ if st.session_state.tasks:
 
     if st.button("Clear all tasks"):
         st.session_state.tasks = []
+        _save(owner_name, available_mins, pet_name, species, age)
         st.rerun()
 else:
     st.info("No tasks yet. Add one above.")
