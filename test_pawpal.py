@@ -44,6 +44,36 @@ def test_caretask_preferred_time_stored():
     task = CareTask("Walk", 20, "high", preferred_time="morning")
     assert task.preferred_time == "morning"
 
+def test_caretask_start_time_default_is_none():
+    task = CareTask("Walk", 20, "high")
+    assert task.start_time is None
+
+def test_caretask_start_time_stored():
+    task = CareTask("Walk", 20, "high", start_time="08:00")
+    assert task.start_time == "08:00"
+
+def test_caretask_completed_default_is_false():
+    task = CareTask("Walk", 20, "high")
+    assert task.completed is False
+
+def test_caretask_frequency_default_is_none():
+    task = CareTask("Walk", 20, "high")
+    assert task.frequency is None
+
+def test_caretask_pet_name_default_is_none():
+    task = CareTask("Walk", 20, "high")
+    assert task.pet_name is None
+
+def test_caretask_all_optional_fields_stored():
+    task = CareTask("Meds", 10, "high",
+                    preferred_time="morning", start_time="08:00",
+                    completed=False, frequency="daily", pet_name="Mochi")
+    assert task.preferred_time == "morning"
+    assert task.start_time == "08:00"
+    assert task.completed is False
+    assert task.frequency == "daily"
+    assert task.pet_name == "Mochi"
+
 
 # --- CareTask.priority_value ---
 
@@ -270,6 +300,11 @@ def test_filter_no_match_returns_empty(scheduler):
     scheduler.add_task(CareTask("Walk", 30, "high", pet_name="Mochi"))
     assert scheduler.filter_tasks(pet_name="Bunny") == []
 
+def test_filter_no_args_returns_all(scheduler):
+    scheduler.add_task(CareTask("Walk", 30, "high"))
+    scheduler.add_task(CareTask("Feed", 10, "medium"))
+    assert scheduler.filter_tasks() == scheduler.tasks
+
 
 # --- Scheduler.mark_task_complete / recurrence ---
 
@@ -345,3 +380,31 @@ def test_detect_conflicts_warning_contains_task_titles(scheduler):
     scheduler.add_task(CareTask("Litter box",   10, "medium", start_time="08:00"))
     warning = scheduler.detect_conflicts()[0]
     assert "Morning walk" in warning or "Litter box" in warning
+
+def test_detect_conflicts_single_task_no_conflict(scheduler):
+    scheduler.add_task(CareTask("Walk", 30, "high", start_time="08:00"))
+    assert scheduler.detect_conflicts() == []
+
+def test_detect_conflicts_three_tasks_same_time(scheduler):
+    # Only the 2nd task triggers a warning (dict stores first seen; 3rd sees same key again)
+    scheduler.add_task(CareTask("Walk",    30, "high",   start_time="08:00"))
+    scheduler.add_task(CareTask("Litter",  10, "medium", start_time="08:00"))
+    scheduler.add_task(CareTask("Feeding", 10, "high",   start_time="08:00"))
+    warnings = scheduler.detect_conflicts()
+    assert len(warnings) == 2
+
+def test_sort_by_time_only_timed_tasks(scheduler):
+    scheduler.add_task(CareTask("Walk",    30, "high",   start_time="09:00"))
+    scheduler.add_task(CareTask("Feeding", 10, "high",   start_time="07:00"))
+    scheduler.add_task(CareTask("Meds",    10, "medium", start_time="12:00"))
+    result = scheduler.sort_by_time()
+    assert [t.start_time for t in result] == ["07:00", "09:00", "12:00"]
+    assert all(t.start_time is not None for t in result)
+
+def test_build_plan_includes_completed_tasks(scheduler):
+    # build_plan does not filter out already-completed tasks — documents current behaviour
+    task = CareTask("Walk", 20, "high")
+    task.completed = True
+    scheduler.add_task(task)
+    plan = scheduler.build_plan()
+    assert any(t.title == "Walk" for t in plan.scheduled)

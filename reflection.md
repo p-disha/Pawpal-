@@ -134,6 +134,8 @@ What was actually built In practice, Scheduler holds them independently (no dire
 
 One honest gap to note: preferred_time is stored on CareTask and shown in the UI, but build_plan() doesn't use it yet — the scheduler only considers priority and duration. That's a natural next feature to add.
 
+In Phase 2, four more fields were added to `CareTask` (`start_time`, `completed`, `frequency`, `pet_name`) and four new methods to `Scheduler` (`sort_by_time`, `filter_tasks`, `mark_task_complete`, `detect_conflicts`). These were not in the initial UML and emerged from the feature requirements rather than upfront design. The final UML (`uml_final.png`) reflects all of these additions.
+
 ## 2. Scheduling Logic and Tradeoffs
 
 **a. Constraints and priorities**
@@ -183,16 +185,26 @@ The AI's initial UML showed a direct 1-to-1 ownership arrow from Owner to Pet. D
 - What behaviors did you test?
 - Why were these tests important?
 
-16 tests were written covering: priority_value() returning correct integers for all valid and invalid inputs; add_task() storing tasks correctly; build_plan() scheduling all tasks when they fit, skipping tasks when time runs out, preferring high-priority tasks over low-priority ones when budgets conflict, handling zero tasks gracefully, skipping a single task that exceeds the total budget, and preserving insertion order for equal-priority tasks; and explain() correctly listing scheduled tasks, skipped tasks, showing a no-tasks message, and reporting the correct total time.
+55 tests across all classes and methods, organised in 10 groups:
 
-These tests mattered because the scheduler's correctness is not visually obvious — a bug in priority sorting or time accounting could produce a plan that looks plausible in the UI but is wrong. Tests make the logic verifiable independent of the UI.
+- **CareTask attributes** — all 8 fields tested individually (defaults and stored values), including the Phase 2 additions: `start_time`, `completed`, `frequency`, `pet_name`.
+- **priority_value()** — all three valid priorities plus unknown input returning 0.
+- **Scheduler.add_task()** — single and multiple tasks appended correctly.
+- **Scheduler.build_plan()** — tasks fit, skipped when over budget, priority wins tie-break, empty plan, exact-fit boundary, idempotency, equal-priority insertion order, and documented behaviour that completed tasks are not filtered out of the plan.
+- **Scheduler.sort_by_time()** — chronological ordering, untimed tasks last, all-untimed, all-timed, empty list.
+- **Scheduler.filter_tasks()** — by completion status, pet name, combined, no-args returns all, no match returns empty.
+- **Scheduler.mark_task_complete()** — flag set, daily recurrence, weekly recurrence, non-recurring returns None, all attributes preserved on copy.
+- **Scheduler.detect_conflicts()** — same-time flagged, no overlap, multiple clashes, single task (no conflict), three tasks at one slot (two warnings), untimed tasks ignored, warning contains task titles.
+- **DailyPlan.explain()** — scheduled listed, skipped listed, no-tasks message, total time, zero total, priority shown, all-skipped scenario.
+
+These tests mattered because the scheduler's correctness is not visually obvious — a bug in priority sorting or time accounting could produce a plan that looks plausible in the UI but is wrong. Tests make the logic verifiable independent of the UI, and they document intended behaviour (like `build_plan` including completed tasks) that would otherwise be invisible.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
 - What edge cases would you test next if you had more time?
 
-Confidence is high for the core behaviors covered by the 16 tests. The main untested area is preferred_time — since the scheduler ignores it currently, there is nothing to test yet, but once time-of-day scheduling is added it will need its own test suite. Other edge cases worth testing next: tasks with duration exactly equal to the remaining budget (boundary condition), duplicate task titles, and very large task lists to check performance doesn't degrade noticeably.
+Confidence is high — 55 tests pass covering normal cases, boundary conditions, and edge cases for every method in `pawpal_system.py`. The main remaining gap is that `build_plan()` does not filter out already-completed tasks; a test was added to document this current behaviour, but fixing it would require a decision about whether completed recurring tasks should be excluded or replaced. Other gaps worth addressing: duration-based overlap detection (two tasks whose windows overlap even if start times differ), very large task lists for performance, and end-to-end UI testing via Streamlit's testing utilities.
 
 ---
 
