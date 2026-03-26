@@ -230,6 +230,36 @@ def test_explain_all_skipped_no_scheduled():
     assert "Walk" in text
 
 
+# --- Scheduler.sort_by_priority_then_time ---
+
+def test_priority_then_time_high_before_medium_before_low(scheduler):
+    scheduler.add_task(CareTask("Low task",    10, "low",    start_time="07:00"))
+    scheduler.add_task(CareTask("High task",   10, "high",   start_time="09:00"))
+    scheduler.add_task(CareTask("Medium task", 10, "medium", start_time="08:00"))
+    result = scheduler.sort_by_priority_then_time()
+    assert result[0].priority == "high"
+    assert result[1].priority == "medium"
+    assert result[2].priority == "low"
+
+def test_priority_then_time_sorts_by_time_within_same_priority(scheduler):
+    scheduler.add_task(CareTask("Walk 2",  20, "high", start_time="09:00"))
+    scheduler.add_task(CareTask("Meds",    10, "high", start_time="07:00"))
+    scheduler.add_task(CareTask("Walk 1",  30, "high", start_time="08:00"))
+    result = scheduler.sort_by_priority_then_time()
+    times = [t.start_time for t in result]
+    assert times == ["07:00", "08:00", "09:00"]
+
+def test_priority_then_time_untimed_tasks_last_within_priority(scheduler):
+    scheduler.add_task(CareTask("Timed high",   10, "high", start_time="08:00"))
+    scheduler.add_task(CareTask("Untimed high",  10, "high"))
+    result = scheduler.sort_by_priority_then_time()
+    assert result[0].title == "Timed high"
+    assert result[1].title == "Untimed high"
+
+def test_priority_then_time_empty(scheduler):
+    assert scheduler.sort_by_priority_then_time() == []
+
+
 # --- Scheduler.sort_by_time ---
 
 def test_sort_by_time_chronological_order(scheduler):

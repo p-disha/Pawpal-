@@ -1,6 +1,8 @@
 import streamlit as st
 from pawpal_system import Owner, Pet, CareTask, Scheduler, save_to_json, load_from_json
 
+PRIORITY_BADGE = {"high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}
+
 DATA_FILE = "data.json"
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
@@ -115,15 +117,24 @@ if st.session_state.tasks:
     for warning in conflicts:
         st.warning(warning)
 
-    # Toggle: sort by time vs insertion order
-    sort_mode = st.radio("View order", ["By start time", "By insertion order"], horizontal=True)
-    display_tasks = _sched.sort_by_time() if sort_mode == "By start time" else _sched.tasks
+    # Toggle sort mode
+    sort_mode = st.radio(
+        "View order",
+        ["Priority then time", "By start time", "By insertion order"],
+        horizontal=True,
+    )
+    if sort_mode == "Priority then time":
+        display_tasks = _sched.sort_by_priority_then_time()
+    elif sort_mode == "By start time":
+        display_tasks = _sched.sort_by_time()
+    else:
+        display_tasks = _sched.tasks
 
     table_data = [
         {
+            "Priority": PRIORITY_BADGE.get(t.priority, t.priority),
             "Title": t.title,
             "Duration (min)": t.duration_mins,
-            "Priority": t.priority,
             "Start time": t.start_time or "—",
             "Preferred": t.preferred_time or "any",
             "Repeats": t.frequency or "—",
@@ -172,19 +183,20 @@ if st.button("Generate schedule", type="primary"):
             f"{total_scheduled} / {available_mins} min used"
         )
 
-        # Scheduled tasks table
+        # Scheduled tasks table — priority then time order
         if plan.scheduled:
             st.subheader("Scheduled Tasks")
+            scheduled_set = set(id(t) for t in plan.scheduled)
             st.table([
                 {
+                    "Priority": PRIORITY_BADGE.get(t.priority, t.priority),
                     "Task": t.title,
                     "Duration (min)": t.duration_mins,
-                    "Priority": t.priority,
                     "Start time": t.start_time or "—",
                     "Repeats": t.frequency or "—",
                 }
-                for t in scheduler.sort_by_time()
-                if t in plan.scheduled
+                for t in scheduler.sort_by_priority_then_time()
+                if id(t) in scheduled_set
             ])
 
         # Skipped tasks
@@ -192,10 +204,8 @@ if st.button("Generate schedule", type="primary"):
             st.subheader("Skipped Tasks")
             st.caption("These tasks did not fit within your available time.")
             for task in plan.skipped:
-                st.error(
-                    f"{task.title} — {task.duration_mins} min | priority: {task.priority}",
-                    icon="🚫",
-                )
+                badge = PRIORITY_BADGE.get(task.priority, task.priority)
+                st.error(f"{badge}  {task.title} — {task.duration_mins} min", icon="🚫")
 
         # Explanation
         with st.expander("View explanation", expanded=False):

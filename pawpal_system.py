@@ -146,6 +146,20 @@ class Scheduler:
 
         return plan
 
+    def sort_by_priority_then_time(self) -> list[CareTask]:
+        """Return tasks sorted by priority (high→low), then by start_time within each level.
+
+        Tasks with no start_time are placed after timed tasks at the same priority level.
+        This gives a schedule view that surfaces the most important work first while
+        preserving chronological order within each priority band.
+        """
+        def sort_key(task: CareTask) -> tuple:
+            priority_rank = -task.priority_value()          # negate: higher priority first
+            time_rank     = task.start_time or "99:99"      # no time sorts last within band
+            return (priority_rank, time_rank)
+
+        return sorted(self.tasks, key=sort_key)
+
     def sort_by_time(self) -> list[CareTask]:
         """Return tasks sorted by start_time (HH:MM); tasks with no time go last."""
         timed = sorted(
