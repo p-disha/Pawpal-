@@ -24,12 +24,16 @@ class Pet:
 
 @dataclass
 class CareTask:
-    """A single pet care task with a duration, priority, and optional time-of-day preference."""
+    """A single pet care task with duration, priority, scheduling time, and recurrence."""
 
     title: str
     duration_mins: int
-    priority: str  # "low" | "medium" | "high"
-    preferred_time: str | None = None  # "morning" | "afternoon" | "evening" | None
+    priority: str           # "low" | "medium" | "high"
+    preferred_time: str | None = None   # "morning" | "afternoon" | "evening" | None
+    start_time: str | None = None       # "HH:MM" 24-hour format
+    completed: bool = False
+    frequency: str | None = None        # "daily" | "weekly" | None
+    pet_name: str | None = None         # used for cross-pet filtering
 
     def priority_value(self) -> int:
         """Return numeric priority so tasks can be sorted (higher = more important)."""
@@ -94,3 +98,58 @@ class Scheduler:
                 plan.skipped.append(task)
 
         return plan
+
+    def sort_by_time(self) -> list[CareTask]:
+        """Return tasks sorted by start_time (HH:MM); tasks with no time go last."""
+        timed = sorted(
+            (t for t in self.tasks if t.start_time),
+            key=lambda t: t.start_time  # HH:MM strings sort correctly lexicographically
+        )
+        untimed = [t for t in self.tasks if not t.start_time]
+        return timed + untimed
+
+    def filter_tasks(
+        self,
+        *,
+        completed: bool | None = None,
+        pet_name: str | None = None,
+    ) -> list[CareTask]:
+        """Return tasks matching the given completion status and/or pet name."""
+        result = self.tasks
+        if completed is not None:
+            result = [t for t in result if t.completed == completed]
+        if pet_name is not None:
+            result = [t for t in result if t.pet_name == pet_name]
+        return result
+
+    def mark_task_complete(self, task: CareTask) -> CareTask | None:
+        """Mark a task done; if it recurs daily or weekly, add the next instance and return it."""
+        task.completed = True
+        if task.frequency in ("daily", "weekly"):
+            next_task = CareTask(
+                title=task.title,
+                duration_mins=task.duration_mins,
+                priority=task.priority,
+                preferred_time=task.preferred_time,
+                start_time=task.start_time,
+                frequency=task.frequency,
+                pet_name=task.pet_name,
+            )
+            self.tasks.append(next_task)
+            return next_task
+        return None
+
+    def detect_conflicts(self) -> list[str]:
+        """Return warning messages for any two tasks sharing the same start_time."""
+        warnings = []
+        seen: dict[str, CareTask] = {}
+        for task in (t for t in self.tasks if t.start_time):
+            if task.start_time in seen:
+                other = seen[task.start_time]
+                warnings.append(
+                    f"WARNING: Conflict at {task.start_time} — "
+                    f"'{task.title}' and '{other.title}' are scheduled at the same time."
+                )
+            else:
+                seen[task.start_time] = task
+        return warnings

@@ -154,6 +154,8 @@ The scheduler uses a greedy algorithm: it sorts all tasks by priority (highest f
 
 This tradeoff is reasonable for pet care because the owner has already expressed which tasks matter most. Missing a low-priority grooming session is a better outcome than missing medications or a walk. Simplicity also matters here — a greedy plan is easy to explain and easy for an owner to review and override manually.
 
+A second tradeoff exists in conflict detection: `detect_conflicts()` only flags tasks that share an exact `start_time` string match ("08:00" == "08:00"). It does not check for duration-based overlaps — a 30-minute task at 08:00 and a 10-minute task at 08:15 would not be flagged even though they overlap in real time. This is a deliberate simplification: exact-match detection is O(n) with a single dictionary pass, requires no date arithmetic, and catches the most common mistake (copying the same time slot). Overlap detection would require converting times to integers and comparing ranges, adding complexity that isn't necessary for an MVP planning tool where the owner reviews the final schedule anyway.
+
 ---
 
 ## 3. AI Collaboration
