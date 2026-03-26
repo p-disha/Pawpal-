@@ -7,12 +7,16 @@ PRIORITY_MAP = {"low": 1, "medium": 2, "high": 3}
 
 @dataclass
 class Owner:
+    """Represents the pet owner and their total available time for the day."""
+
     name: str
     available_mins: int  # total minutes available in the day
 
 
 @dataclass
 class Pet:
+    """Represents a pet with basic identifying information."""
+
     name: str
     species: str
     age: int  # in years
@@ -20,6 +24,8 @@ class Pet:
 
 @dataclass
 class CareTask:
+    """A single pet care task with a duration, priority, and optional time-of-day preference."""
+
     title: str
     duration_mins: int
     priority: str  # "low" | "medium" | "high"
@@ -32,6 +38,8 @@ class CareTask:
 
 @dataclass
 class DailyPlan:
+    """The output of a scheduling run: tasks that fit and tasks that were skipped."""
+
     scheduled: list[CareTask] = field(default_factory=list)
     skipped: list[CareTask] = field(default_factory=list)
 
@@ -60,6 +68,8 @@ class DailyPlan:
 
 @dataclass
 class Scheduler:
+    """Builds a daily care plan by fitting tasks into the owner's available time by priority."""
+
     owner: Owner
     pet: Pet
     tasks: list[CareTask] = field(default_factory=list)
