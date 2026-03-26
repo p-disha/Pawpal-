@@ -86,6 +86,12 @@ The scheduler produces a prioritized plan, skips tasks that don't fit, and expla
 
 ![alt text](image-3.png)
 
+![alt text](image-4.png)
+
+![alt text](image-5.png)
+
+![alt text](image-6.png)
+
 
 ## Running the app
 

@@ -3,6 +3,27 @@ from pawpal_system import Owner, Pet, CareTask, Scheduler, save_to_json, load_fr
 
 PRIORITY_BADGE = {"high": "🔴 High", "medium": "🟡 Medium", "low": "🟢 Low"}
 
+TASK_EMOJI = {
+    "walk":       "🦮",
+    "feeding":    "🍽️",
+    "feed":       "🍽️",
+    "meds":       "💊",
+    "medication": "💊",
+    "grooming":   "✂️",
+    "groom":      "✂️",
+    "play":       "🎾",
+    "litter":     "🧹",
+    "enrichment": "🧩",
+    "laser":      "🔦",
+}
+
+def task_emoji(title: str) -> str:
+    lower = title.lower()
+    for keyword, icon in TASK_EMOJI.items():
+        if keyword in lower:
+            return icon
+    return "📋"
+
 DATA_FILE = "data.json"
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="centered")
@@ -133,7 +154,7 @@ if st.session_state.tasks:
     table_data = [
         {
             "Priority": PRIORITY_BADGE.get(t.priority, t.priority),
-            "Title": t.title,
+            "Title": f"{task_emoji(t.title)}  {t.title}",
             "Duration (min)": t.duration_mins,
             "Start time": t.start_time or "—",
             "Preferred": t.preferred_time or "any",
@@ -141,7 +162,7 @@ if st.session_state.tasks:
         }
         for t in display_tasks
     ]
-    st.table(table_data)
+    st.dataframe(table_data, hide_index=True, use_container_width=True)
 
     if st.button("Clear all tasks"):
         st.session_state.tasks = []
@@ -187,17 +208,17 @@ if st.button("Generate schedule", type="primary"):
         if plan.scheduled:
             st.subheader("Scheduled Tasks")
             scheduled_set = set(id(t) for t in plan.scheduled)
-            st.table([
+            st.dataframe([
                 {
                     "Priority": PRIORITY_BADGE.get(t.priority, t.priority),
-                    "Task": t.title,
+                    "Task": f"{task_emoji(t.title)}  {t.title}",
                     "Duration (min)": t.duration_mins,
                     "Start time": t.start_time or "—",
                     "Repeats": t.frequency or "—",
                 }
                 for t in scheduler.sort_by_priority_then_time()
                 if id(t) in scheduled_set
-            ])
+            ], hide_index=True, use_container_width=True)
 
         # Skipped tasks
         if plan.skipped:
