@@ -408,3 +408,88 @@ def test_build_plan_includes_completed_tasks(scheduler):
     scheduler.add_task(task)
     plan = scheduler.build_plan()
     assert any(t.title == "Walk" for t in plan.scheduled)
+
+
+# --- Scheduler.build_plan_weighted ---
+
+def test_weighted_prefers_short_high_priority_over_long_high_priority(scheduler):
+    # 60 min budget; weighted scheduler should pick short high-priority tasks
+    # over a single long high-priority task that would crowd others out
+    scheduler.owner.available_mins = 60
+    scheduler.add_task(CareTask("Long walk",   60, "high"))   # score = 3*100/60 = 5.0
+    scheduler.add_task(CareTask("Meds",        10, "high"))   # score = 3*100/10 = 30.0
+    scheduler.add_task(CareTask("Feed",        10, "high"))   # score = 3*100/10 = 30.0
+    scheduler.add_task(CareTask("Brush",       10, "medium")) # score = 2*100/10 = 20.0
+    plan = scheduler.build_plan_weighted()
+    titles = [t.title for t in plan.scheduled]
+    # Meds, Feed, Brush (30 min total) rank above Long walk
+    assert "Meds" in titles
+    assert "Feed" in titles
+    assert "Brush" in titles
+    assert "Long walk" in [t.title for t in plan.skipped]
+
+def test_weighted_schedules_all_when_budget_sufficient(scheduler):
+    scheduler.add_task(CareTask("Walk", 20, "high"))
+    scheduler.add_task(CareTask("Feed", 10, "medium"))
+    plan = scheduler.build_plan_weighted()
+    assert len(plan.scheduled) == 2
+    assert len(plan.skipped) == 0
+
+def test_weighted_skips_tasks_that_dont_fit(scheduler):
+    scheduler.owner.available_mins = 15
+    scheduler.add_task(CareTask("Meds",  10, "high"))
+    scheduler.add_task(CareTask("Walk",  30, "high"))
+    plan = scheduler.build_plan_weighted()
+    assert any(t.title == "Meds" for t in plan.scheduled)
+    assert any(t.title == "Walk" for t in plan.skipped)
+
+def test_weighted_empty_tasks_returns_empty_plan(scheduler):
+    plan = scheduler.build_plan_weighted()
+    assert plan.scheduled == []
+    assert plan.skipped == []
+
+def test_weighted_low_priority_short_can_outscore_high_priority_long(scheduler):
+    # low priority 1-min task scores 1*100/1=100; high priority 100-min scores 3*100/100=3
+    scheduler.owner.available_mins = 5
+    scheduler.add_task(CareTask("Quick low",  1, "low"))
+    scheduler.add_task(CareTask("Long high", 10, "high"))
+    plan = scheduler.build_plan_weighted()
+    assert plan.scheduled[0].title == "Quick low"
+
+
+# --- Scheduler.suggest_next_slot ---
+
+def test_suggest_next_slot_empty_schedule(scheduler):
+    # No tasks — first slot from search_from should be returned
+    result = scheduler.suggest_next_slot(30, search_from="08:00")
+    assert result == "08:00"
+
+def test_suggest_next_slot_after_existing_task(scheduler):
+    scheduler.add_task(CareTask("Walk", 30, "high", start_time="08:00"))
+    result = scheduler.suggest_next_slot(20, search_from="08:00")
+    assert result == "08:30"
+
+def test_suggest_next_slot_gap_between_tasks(scheduler):
+    scheduler.add_task(CareTask("Walk",    30, "high", start_time="08:00"))
+    scheduler.add_task(CareTask("Feeding", 20, "high", start_time="10:00"))
+    # 90-min gap between 08:30 and 10:00 — a 60-min task fits
+    result = scheduler.suggest_next_slot(60, search_from="08:00")
+    assert result == "08:30"
+
+def test_suggest_next_slot_no_gap_returns_none(scheduler):
+    # Fill the day with back-to-back tasks leaving no room
+    scheduler.add_task(CareTask("A", 480, "high", start_time="06:00"))  # 06:00–14:00
+    scheduler.add_task(CareTask("B", 480, "high", start_time="14:00"))  # 14:00–22:00
+    result = scheduler.suggest_next_slot(10, search_from="06:00")
+    assert result is None
+
+def test_suggest_next_slot_skips_past_blocked_time(scheduler):
+    scheduler.add_task(CareTask("Walk",     30, "high", start_time="08:00"))
+    scheduler.add_task(CareTask("Grooming", 30, "high", start_time="09:00"))
+    # Gap after grooming ends at 09:30
+    result = scheduler.suggest_next_slot(30, search_from="08:00")
+    assert result == "08:30"
+
+def test_suggest_next_slot_default_search_from(scheduler):
+    result = scheduler.suggest_next_slot(30)
+    assert result == "06:00"

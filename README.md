@@ -24,8 +24,37 @@ The core scheduler (`Scheduler.build_plan()`) uses a **greedy algorithm**: tasks
 ### Plan explanation
 `DailyPlan.explain()` generates a markdown-formatted summary listing every scheduled task with its priority reasoning, every skipped task with the reason it was dropped, and the total time planned. This is displayed in the UI as a collapsible expander.
 
+### Value-density weighted scheduling
+`Scheduler.build_plan_weighted()` implements a **knapsack-inspired scoring algorithm** that goes beyond simple priority ordering. Each task is scored as:
+
+```
+score = priority_value × 100 / duration_mins
+```
+
+This measures *reward per minute invested*. A high-priority 10-minute medication task scores 30, while a high-priority 60-minute walk scores only 5 — so the weighted planner will fit more valuable short tasks into the budget before committing to long ones. In scenarios where a single large high-priority task would crowd out several smaller high-value tasks, `build_plan_weighted()` produces a strictly better outcome than the greedy `build_plan()`.
+
+### Next-available-slot suggestion
+`Scheduler.suggest_next_slot(duration_mins, search_from="06:00")` scans all timed tasks in chronological order and finds the first gap large enough to fit a task of the requested duration. It:
+- Converts all `HH:MM` strings to integer minutes for arithmetic
+- Skips past occupied windows in a single O(n) pass
+- Returns the earliest available `HH:MM` string, or `None` if no gap exists before 22:00
+
+This lets the UI (or the user) quickly answer *"when can I squeeze in a 20-minute grooming session?"* without manually scanning the schedule.
+
 ### UML-designed architecture
 The system was designed class-first using a UML diagram before any code was written. Five classes with clear, separated responsibilities: `Owner`, `Pet`, `CareTask`, `Scheduler`, and `DailyPlan`. The final diagram (`uml_final.png`) reflects every method and relationship in the shipped code.
+
+---
+
+## How Agent Mode was used
+
+The two advanced algorithms (`build_plan_weighted` and `suggest_next_slot`) were implemented using AI agent mode with the following approach:
+
+**Value-density scheduling:** The agent was prompted with the existing `build_plan()` method and asked to design an alternative that maximises *value per minute* rather than raw priority. The agent identified the knapsack scoring formula (`priority × 100 / duration`), explained why it outperforms greedy in crowded budgets, and implemented it in a single readable method. The scoring constant `100` was chosen so integer priority values (1–3) produce whole-number scores without floating-point noise.
+
+**Next-available-slot:** The agent was given the existing `start_time` field and `sort_by_time()` method as context and asked for a lightweight slot-finder. It proposed converting `HH:MM` strings to integer minutes (avoiding `datetime` imports), scanning occupied intervals in a sorted pass, and returning `None` when no gap exists before end-of-day. The end-of-day boundary (`22:00`) and default search origin (`06:00`) were chosen by reviewing the values used in `main.py`.
+
+**Judgment applied:** The agent's first draft used `datetime.strptime` for time parsing, which was heavier than needed. This was rejected in favour of the manual `split(":")` conversion, keeping the method self-contained and dependency-free. Test cases were also reviewed to confirm the gap-detection logic handles overlapping tasks correctly (the `suggest_next_slot_skips_past_blocked_time` test was added specifically to catch a subtle off-by-one the agent initially had).
 
 ---
 
@@ -82,7 +111,7 @@ python -m pytest test_pawpal.py -v
 
 ### What the tests cover
 
-55 tests across all core behaviors:
+66 tests across all core behaviors:
 
 | Area | Tests | Description |
 |---|---|---|
@@ -90,6 +119,8 @@ python -m pytest test_pawpal.py -v
 | `CareTask` | 14 | All 8 fields (defaults + stored values), all priority levels + unknown input |
 | `Scheduler.add_task` | 2 | Single and multiple tasks appended |
 | `Scheduler.build_plan` | 8 | Tasks fit, skipped when over budget, priority wins, empty list, exact-fit boundary, idempotency, insertion-order tie-breaking, completed tasks not filtered |
+| `Scheduler.build_plan_weighted` | 5 | Short high-priority preferred, all fit, skips over budget, empty plan, low-priority short outscores high-priority long |
+| `Scheduler.suggest_next_slot` | 6 | Empty schedule, after existing task, gap between tasks, no gap returns None, skips blocked time, default search_from |
 | `Scheduler.sort_by_time` | 5 | Chronological order, untimed tasks last, all-untimed, all-timed, empty list |
 | `Scheduler.filter_tasks` | 6 | Filter by status, pet name, combined, no args returns all, no match |
 | `Scheduler.mark_task_complete` | 5 | Flag set, daily recurrence, weekly recurrence, non-recurring returns None, attributes preserved |
@@ -108,7 +139,7 @@ All 55 tests pass covering normal cases, boundary conditions, and edge cases acr
 pawpal_system.py   # Core classes: Owner, Pet, CareTask, Scheduler, DailyPlan
 app.py             # Streamlit UI
 main.py            # Terminal demo: sorting, filtering, conflicts, recurring tasks
-test_pawpal.py     # pytest test suite (55 tests)
+test_pawpal.py     # pytest test suite (66 tests)
 uml_final.png      # Final UML class diagram (generated from generate_uml.py)
 generate_uml.py    # Script to regenerate the UML diagram
 reflection.md      # Design decisions and project reflection

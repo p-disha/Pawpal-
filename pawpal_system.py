@@ -153,3 +153,63 @@ class Scheduler:
             else:
                 seen[task.start_time] = task
         return warnings
+
+    def build_plan_weighted(self) -> DailyPlan:
+        """Schedule tasks by value density (priority per minute) to fit more high-value work.
+
+        Each task is scored as priority_value * 100 / duration_mins.
+        A high-priority 10-min task outscores a high-priority 60-min task, so the
+        algorithm packs more valuable tasks into the available time budget than the
+        basic greedy approach can when large high-priority tasks would otherwise
+        crowd out several smaller high-value ones.
+        """
+        def value_density(task: CareTask) -> float:
+            return task.priority_value() * 100 / task.duration_mins
+
+        ranked = sorted(self.tasks, key=value_density, reverse=True)
+
+        plan = DailyPlan()
+        time_remaining = self.owner.available_mins
+
+        for task in ranked:
+            if task.duration_mins <= time_remaining:
+                plan.scheduled.append(task)
+                time_remaining -= task.duration_mins
+            else:
+                plan.skipped.append(task)
+
+        return plan
+
+    def suggest_next_slot(self, duration_mins: int, search_from: str = "06:00") -> str | None:
+        """Return the earliest HH:MM slot that fits a task of the given duration.
+
+        Scans timed tasks in chronological order and finds the first gap large enough
+        to fit duration_mins minutes, starting from search_from. Returns None if no
+        gap exists before 22:00 (end of day).
+        """
+        def to_mins(t: str) -> int:
+            h, m = t.split(":")
+            return int(h) * 60 + int(m)
+
+        def to_hhmm(mins: int) -> str:
+            return f"{mins // 60:02d}:{mins % 60:02d}"
+
+        end_of_day = to_mins("22:00")
+        cursor = to_mins(search_from)
+
+        occupied = sorted(
+            [(to_mins(t.start_time), to_mins(t.start_time) + t.duration_mins)
+             for t in self.tasks if t.start_time],
+            key=lambda x: x[0],
+        )
+
+        for start, end in occupied:
+            if start >= cursor + duration_mins:
+                return to_hhmm(cursor)   # gap before this task is big enough
+            if end > cursor:
+                cursor = end             # skip past this task
+
+        if cursor + duration_mins <= end_of_day:
+            return to_hhmm(cursor)
+
+        return None
